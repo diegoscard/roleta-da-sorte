@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import RouletteWheel from './components/RouletteWheel.tsx';
 import Confetti from './components/Confetti.tsx';
 import { AppState, Prize, RigMode } from './types.ts';
@@ -15,9 +15,22 @@ const App: React.FC = () => {
   const [winProbability, setWinProbability] = useState(5); 
   const [targetPrizeId, setTargetPrizeId] = useState<number>(0);
 
-  // Referências para os áudios
-  const winAudio = useRef(new Audio('https://cdn.pixabay.com/audio/2021/08/04/audio_bbd1346086.mp3'));
-  const loseAudio = useRef(new Audio('https://cdn.pixabay.com/audio/2022/03/24/audio_4f09230531.mp3'));
+  // Áudios com URLs mais estáveis e de carregamento rápido
+  const winAudio = useRef<HTMLAudioElement | null>(null);
+  const loseAudio = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    winAudio.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2018/success-fanfare-trumpets-618.wav');
+    loseAudio.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2017/fail-buzzer-01-655.wav');
+    
+    // Configurações de volume
+    if (winAudio.current) winAudio.current.volume = 0.5;
+    if (loseAudio.current) loseAudio.current.volume = 0.3;
+
+    // Pré-carregamento
+    winAudio.current?.load();
+    loseAudio.current?.load();
+  }, []);
 
   const toggleAdmin = () => setShowAdmin(!showAdmin);
 
@@ -27,11 +40,20 @@ const App: React.FC = () => {
   const handleSpin = useCallback(() => {
     if (appState === AppState.SPINNING) return;
 
-    // Reset áudios e pré-carrega
-    winAudio.current.pause();
-    winAudio.current.currentTime = 0;
-    loseAudio.current.pause();
-    loseAudio.current.currentTime = 0;
+    // DESBLOQUEIO DE ÁUDIO PARA MOBILE
+    // Tocamos e pausamos imediatamente para ganhar permissão do navegador
+    if (winAudio.current) {
+      winAudio.current.play().then(() => {
+        winAudio.current?.pause();
+        winAudio.current!.currentTime = 0;
+      }).catch(() => {});
+    }
+    if (loseAudio.current) {
+      loseAudio.current.play().then(() => {
+        loseAudio.current?.pause();
+        loseAudio.current!.currentTime = 0;
+      }).catch(() => {});
+    }
 
     setAppState(AppState.SPINNING);
     setResult(null);
@@ -54,9 +76,9 @@ const App: React.FC = () => {
     const angleStep = 360 / PRIZES.length;
     const prizeIndex = PRIZES.findIndex(p => p.id === selectedPrize.id);
     
-    const extraSpins = (8 + Math.floor(Math.random() * 5)) * 360;
+    const extraSpins = (10 + Math.floor(Math.random() * 5)) * 360; // Mais voltas para drama
     const sliceStartAngle = prizeIndex * angleStep;
-    const randomOffsetInSlice = (0.15 + Math.random() * 0.7) * angleStep;
+    const randomOffsetInSlice = (0.2 + Math.random() * 0.6) * angleStep;
     const targetRotationWithinCircle = 360 - (sliceStartAngle + randomOffsetInSlice);
     const currentRotationOffset = rotation % 360;
     const rotationToTarget = (targetRotationWithinCircle - currentRotationOffset + 360) % 360;
@@ -68,33 +90,36 @@ const App: React.FC = () => {
       setAppState(AppState.RESULT);
       setResult(selectedPrize);
       
-      // Toca o som baseado no resultado
       if (selectedPrize.isWin) {
-        winAudio.current.play().catch(e => console.log("Audio play blocked", e));
+        winAudio.current?.play().catch(e => console.error("Win audio blocked", e));
       } else {
-        loseAudio.current.play().catch(e => console.log("Audio play blocked", e));
+        loseAudio.current?.play().catch(e => console.error("Lose audio blocked", e));
       }
-    }, SPIN_DURATION + 200);
+    }, SPIN_DURATION + 100);
   }, [appState, rotation, rigMode, winProbability, targetPrizeId, winPrizes, losePrizes]);
 
   const reset = () => {
     setAppState(AppState.IDLE);
     setResult(null);
-    winAudio.current.pause();
-    loseAudio.current.pause();
+    if (winAudio.current) { winAudio.current.pause(); winAudio.current.currentTime = 0; }
+    if (loseAudio.current) { loseAudio.current.pause(); loseAudio.current.currentTime = 0; }
   };
 
   return (
     <div className="flex flex-col items-center justify-center h-screen w-screen bg-slate-950 text-white overflow-hidden">
-      <div className="relative w-full h-full sm:max-w-[400px] sm:h-[90vh] sm:rounded-[3rem] sm:border-[10px] border-slate-800 bg-gradient-to-b from-slate-900 to-black shadow-2xl overflow-hidden flex flex-col transition-all duration-500">
+      <div className="relative w-full h-full sm:max-w-[400px] sm:h-[90vh] sm:rounded-[3.5rem] sm:border-[12px] border-slate-800 bg-gradient-to-b from-slate-900 to-black shadow-2xl overflow-hidden flex flex-col transition-all duration-500">
         
         {appState === AppState.RESULT && result?.isWin && <Confetti />}
 
-        <div className="pt-12 pb-6 px-6 text-center shrink-0 z-10">
-          <h1 className="text-4xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-500 to-yellow-200 drop-shadow-md tracking-tighter uppercase italic text-nowrap">
+        <div className="pt-14 pb-4 px-6 text-center shrink-0 z-10">
+          <h1 className="text-4xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-500 to-yellow-200 drop-shadow-md tracking-tighter uppercase italic">
             Giro da Sorte
           </h1>
-          <p className="text-slate-500 text-[10px] mt-2 font-bold uppercase tracking-widest">Sua chance é agora!</p>
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <span className="w-8 h-[1px] bg-yellow-500/30"></span>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em]">Sua chance é agora!</p>
+            <span className="w-8 h-[1px] bg-yellow-500/30"></span>
+          </div>
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center px-4 overflow-hidden z-10">
@@ -106,24 +131,24 @@ const App: React.FC = () => {
             />
           </div>
           
-          <div className="mt-12 h-24 flex items-center justify-center text-center px-6">
+          <div className="mt-10 h-28 flex items-center justify-center text-center px-6">
             {appState === AppState.RESULT && result && (
-              <div className="animate-in zoom-in duration-500">
+              <div className="animate-in zoom-in slide-in-from-bottom-4 duration-500">
                 {result.isWin ? (
                   <div className="flex flex-col items-center">
-                    <span className="text-yellow-400 text-xs font-bold uppercase tracking-[0.2em] mb-1 animate-bounce">PARABÉNS!</span>
-                    <span className="text-4xl sm:text-3xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] leading-none">
+                    <span className="text-yellow-400 text-xs font-black uppercase tracking-[0.3em] mb-2 animate-pulse">VOCÊ GANHOU!</span>
+                    <span className="text-4xl sm:text-3xl font-black text-white drop-shadow-[0_0_20px_rgba(255,215,0,0.5)] leading-none">
                       {result.label}
                     </span>
-                    <button onClick={reset} className="mt-6 px-8 py-3 bg-yellow-500 rounded-full text-slate-900 text-sm font-black uppercase hover:bg-yellow-400 transition-all shadow-lg active:scale-95">
+                    <button onClick={reset} className="mt-6 px-10 py-4 bg-gradient-to-r from-yellow-600 to-yellow-400 rounded-full text-slate-950 text-sm font-black uppercase shadow-[0_10px_20px_rgba(202,138,4,0.3)] active:scale-95 transition-all">
                       Resgatar Prêmio
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center opacity-80">
-                    <span className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1 italic">Desta vez não...</span>
-                    <span className="text-2xl font-black text-slate-200 uppercase">{result.label}</span>
-                    <button onClick={reset} className="mt-6 px-6 py-2 bg-slate-800 rounded-full text-white text-xs font-bold uppercase hover:bg-slate-700 transition-all border border-slate-700 active:scale-95">
+                  <div className="flex flex-col items-center opacity-90">
+                    <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2 italic">Não foi desta vez...</span>
+                    <span className="text-2xl font-black text-slate-300 uppercase tracking-tighter">{result.label}</span>
+                    <button onClick={reset} className="mt-6 px-8 py-3 bg-slate-800/50 rounded-full text-white text-xs font-bold uppercase hover:bg-slate-700 transition-all border border-white/10 active:scale-95">
                       Tentar Novamente
                     </button>
                   </div>
@@ -133,69 +158,49 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="pb-10 pt-4 text-center text-[9px] text-slate-600 uppercase font-bold tracking-widest shrink-0 z-10">
-          Certificado de Segurança Gold
+        <div className="pb-12 pt-4 text-center z-10">
+          <p className="text-[10px] text-slate-600 uppercase font-black tracking-[0.3em]">
+            Certificado de Segurança Gold
+          </p>
         </div>
 
-        <div className="absolute bottom-6 right-6 w-16 h-16 z-[70] cursor-default" onDoubleClick={toggleAdmin} />
+        {/* Secret Admin Button */}
+        <div className="absolute bottom-6 right-6 w-20 h-20 z-[70]" onDoubleClick={toggleAdmin} />
 
+        {/* Admin Panel */}
         {showAdmin && (
-          <div className="absolute inset-0 z-[100] bg-slate-950 p-6 flex flex-col overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-black text-yellow-500 uppercase italic">Controle da Roleta</h2>
-              <button onClick={toggleAdmin} className="text-slate-400 hover:text-white text-2xl">✕</button>
+          <div className="absolute inset-0 z-[100] bg-slate-950 p-6 flex flex-col animate-in fade-in duration-300">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-black text-yellow-500 uppercase italic">Controle Master</h2>
+              <button onClick={toggleAdmin} className="text-slate-400 p-2 text-2xl">✕</button>
             </div>
 
-            <div className="space-y-6 pb-20">
-              <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Modo de Operação</label>
-                <div className="grid grid-cols-1 gap-2">
-                  <button 
-                    onClick={() => setRigMode('ALWAYS_LOSE')}
-                    className={`p-4 rounded-xl text-xs font-bold uppercase transition-all border ${rigMode === 'ALWAYS_LOSE' ? 'bg-red-600 border-red-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
-                  >
-                    Sempre Perder
-                  </button>
-                  <button 
-                    onClick={() => setRigMode('PROBABILITY')}
-                    className={`p-4 rounded-xl text-xs font-bold uppercase transition-all border ${rigMode === 'PROBABILITY' ? 'bg-yellow-600 border-yellow-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
-                  >
-                    Por Probabilidade (%)
-                  </button>
-                  <button 
-                    onClick={() => setRigMode('FORCE_SPECIFIC')}
-                    className={`p-4 rounded-xl text-xs font-bold uppercase transition-all border ${rigMode === 'FORCE_SPECIFIC' ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
-                  >
-                    Forçar Prêmio Específico
-                  </button>
+            <div className="space-y-6 flex-1 overflow-y-auto pb-10">
+              <div className="bg-slate-900/50 p-5 rounded-3xl border border-white/5">
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Estratégia</label>
+                <div className="flex flex-col gap-3">
+                  <button onClick={() => setRigMode('ALWAYS_LOSE')} className={`p-4 rounded-2xl text-xs font-black uppercase transition-all border ${rigMode === 'ALWAYS_LOSE' ? 'bg-red-600 border-red-400 text-white' : 'bg-slate-800 border-white/5 text-slate-500'}`}>Sempre Perder</button>
+                  <button onClick={() => setRigMode('PROBABILITY')} className={`p-4 rounded-2xl text-xs font-black uppercase transition-all border ${rigMode === 'PROBABILITY' ? 'bg-yellow-600 border-yellow-400 text-white' : 'bg-slate-800 border-white/5 text-slate-500'}`}>Probabilidade</button>
+                  <button onClick={() => setRigMode('FORCE_SPECIFIC')} className={`p-4 rounded-2xl text-xs font-black uppercase transition-all border ${rigMode === 'FORCE_SPECIFIC' ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-800 border-white/5 text-slate-500'}`}>Forçar Prêmio</button>
                 </div>
               </div>
 
               {rigMode === 'PROBABILITY' && (
-                <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 animate-in slide-in-from-top-2">
+                <div className="bg-slate-900/50 p-5 rounded-3xl border border-white/5 animate-in slide-in-from-top-2">
                   <div className="flex justify-between mb-4">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Chance de Ganhar</label>
-                    <span className="text-yellow-500 font-black text-lg">{winProbability}%</span>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-nowrap">Taxa de Vitória</label>
+                    <span className="text-yellow-500 font-black text-xl">{winProbability}%</span>
                   </div>
-                  <input 
-                    type="range" min="0" max="100" 
-                    value={winProbability}
-                    onChange={(e) => setWinProbability(parseInt(e.target.value))}
-                    className="w-full h-3 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                  />
+                  <input type="range" min="0" max="100" value={winProbability} onChange={(e) => setWinProbability(parseInt(e.target.value))} className="w-full h-3 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"/>
                 </div>
               )}
 
               {(rigMode === 'PROBABILITY' || rigMode === 'FORCE_SPECIFIC') && (
-                <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 animate-in slide-in-from-top-2">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Prêmio Alvo</label>
+                <div className="bg-slate-900/50 p-5 rounded-3xl border border-white/5 animate-in slide-in-from-top-2">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Selecionar Prêmio Alvo</label>
                   <div className="grid grid-cols-2 gap-2">
                     {winPrizes.map(p => (
-                      <button 
-                        key={p.id}
-                        onClick={() => setTargetPrizeId(p.id)}
-                        className={`p-3 rounded-lg text-[10px] font-black uppercase transition-all border ${targetPrizeId === p.id ? 'bg-white border-white text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
-                      >
+                      <button key={p.id} onClick={() => setTargetPrizeId(p.id)} className={`p-3 rounded-xl text-[10px] font-black uppercase transition-all border ${targetPrizeId === p.id ? 'bg-white text-slate-950 border-white' : 'bg-slate-800 border-white/5 text-slate-500'}`}>
                         {p.label}
                       </button>
                     ))}
@@ -203,11 +208,8 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              <button 
-                onClick={toggleAdmin}
-                className="w-full py-5 bg-white text-black font-black rounded-2xl uppercase text-sm tracking-widest active:scale-95 transition-all shadow-xl"
-              >
-                Salvar Configurações
+              <button onClick={toggleAdmin} className="w-full py-5 bg-yellow-500 text-slate-950 font-black rounded-3xl uppercase text-sm tracking-widest shadow-xl active:scale-95 transition-all">
+                Salvar e Sair
               </button>
             </div>
           </div>
