@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import RouletteWheel from './components/RouletteWheel.tsx';
 import Confetti from './components/Confetti.tsx';
 import { AppState, Prize, RigMode } from './types.ts';
@@ -15,6 +15,10 @@ const App: React.FC = () => {
   const [winProbability, setWinProbability] = useState(5); 
   const [targetPrizeId, setTargetPrizeId] = useState<number>(0);
 
+  // Referências para os áudios
+  const winAudio = useRef(new Audio('https://cdn.pixabay.com/audio/2021/08/04/audio_bbd1346086.mp3'));
+  const loseAudio = useRef(new Audio('https://cdn.pixabay.com/audio/2022/03/24/audio_4f09230531.mp3'));
+
   const toggleAdmin = () => setShowAdmin(!showAdmin);
 
   const winPrizes = useMemo(() => PRIZES.filter(p => p.isWin), []);
@@ -22,6 +26,12 @@ const App: React.FC = () => {
 
   const handleSpin = useCallback(() => {
     if (appState === AppState.SPINNING) return;
+
+    // Reset áudios e pré-carrega
+    winAudio.current.pause();
+    winAudio.current.currentTime = 0;
+    loseAudio.current.pause();
+    loseAudio.current.currentTime = 0;
 
     setAppState(AppState.SPINNING);
     setResult(null);
@@ -57,12 +67,21 @@ const App: React.FC = () => {
     setTimeout(() => {
       setAppState(AppState.RESULT);
       setResult(selectedPrize);
+      
+      // Toca o som baseado no resultado
+      if (selectedPrize.isWin) {
+        winAudio.current.play().catch(e => console.log("Audio play blocked", e));
+      } else {
+        loseAudio.current.play().catch(e => console.log("Audio play blocked", e));
+      }
     }, SPIN_DURATION + 200);
   }, [appState, rotation, rigMode, winProbability, targetPrizeId, winPrizes, losePrizes]);
 
   const reset = () => {
     setAppState(AppState.IDLE);
     setResult(null);
+    winAudio.current.pause();
+    loseAudio.current.pause();
   };
 
   return (
@@ -87,13 +106,13 @@ const App: React.FC = () => {
             />
           </div>
           
-          <div className="mt-12 h-24 flex items-center justify-center text-center">
+          <div className="mt-12 h-24 flex items-center justify-center text-center px-6">
             {appState === AppState.RESULT && result && (
               <div className="animate-in zoom-in duration-500">
                 {result.isWin ? (
                   <div className="flex flex-col items-center">
-                    <span className="text-yellow-400 text-xs font-bold uppercase tracking-[0.2em] mb-1">PARABÉNS!</span>
-                    <span className="text-4xl sm:text-3xl font-black text-white drop-shadow-lg leading-none">
+                    <span className="text-yellow-400 text-xs font-bold uppercase tracking-[0.2em] mb-1 animate-bounce">PARABÉNS!</span>
+                    <span className="text-4xl sm:text-3xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] leading-none">
                       {result.label}
                     </span>
                     <button onClick={reset} className="mt-6 px-8 py-3 bg-yellow-500 rounded-full text-slate-900 text-sm font-black uppercase hover:bg-yellow-400 transition-all shadow-lg active:scale-95">
@@ -102,7 +121,7 @@ const App: React.FC = () => {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center opacity-80">
-                    <span className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Tente outra vez</span>
+                    <span className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1 italic">Desta vez não...</span>
                     <span className="text-2xl font-black text-slate-200 uppercase">{result.label}</span>
                     <button onClick={reset} className="mt-6 px-6 py-2 bg-slate-800 rounded-full text-white text-xs font-bold uppercase hover:bg-slate-700 transition-all border border-slate-700 active:scale-95">
                       Tentar Novamente

@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { Prize } from '../types';
 import { WHEEL_SIZE, PRIZES, SPIN_DURATION } from '../constants';
 
@@ -12,7 +12,72 @@ interface RouletteWheelProps {
 const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, isSpinning }) => {
   const radius = WHEEL_SIZE / 2;
   const angleStep = 360 / PRIZES.length;
-  const sliceRadius = radius - 5; 
+  const sliceRadius = radius - 5;
+  
+  const wheelRef = useRef<HTMLDivElement>(null);
+  const lastTickAngle = useRef<number>(0);
+  const audioCtx = useRef<AudioContext | null>(null);
+
+  // Inicializa o contexto de áudio no primeiro toque
+  const initAudio = () => {
+    if (!audioCtx.current) {
+      audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+  };
+
+  // Função para sintetizar o som de "tick" (pino batendo)
+  const playTick = () => {
+    if (!audioCtx.current) return;
+    const ctx = audioCtx.current;
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'square'; // Som mais percussivo
+    osc.frequency.setValueAtTime(150, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.05);
+
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.05);
+  };
+
+  // Monitora a rotação para disparar os ticks
+  useEffect(() => {
+    if (!isSpinning) return;
+
+    let animationFrame: number;
+    
+    const checkTick = () => {
+      if (!wheelRef.current) return;
+      
+      // Captura a rotação atual da animação CSS
+      const style = window.getComputedStyle(wheelRef.current);
+      const matrix = new DOMMatrixReadOnly(style.transform);
+      const angle = Math.atan2(matrix.b, matrix.a) * (180 / Math.PI);
+      const normalizedAngle = (angle < 0 ? angle + 360 : angle);
+      
+      // Se cruzou a fronteira de uma fatia, toca o som
+      const currentSegment = Math.floor(normalizedAngle / angleStep);
+      const lastSegment = Math.floor(lastTickAngle.current / angleStep);
+      
+      if (currentSegment !== lastSegment) {
+        playTick();
+        lastTickAngle.current = normalizedAngle;
+      }
+      
+      animationFrame = requestAnimationFrame(checkTick);
+    };
+
+    animationFrame = requestAnimationFrame(checkTick);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [isSpinning, angleStep]);
 
   const segments = useMemo(() => {
     return PRIZES.map((prize, index) => {
@@ -35,6 +100,11 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
     });
   }, [radius, sliceRadius, angleStep]);
 
+  const handleButtonClick = () => {
+    initAudio();
+    onSpinClick();
+  };
+
   return (
     <div className="relative flex items-center justify-center p-4 select-none">
       {/* Pointer (Seta Superior Fixa) */}
@@ -47,13 +117,12 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
 
       {/* Main Wheel Container */}
       <div 
+        ref={wheelRef}
         className="relative flex-shrink-0 flex items-center justify-center rounded-full bg-slate-900 shadow-[0_0_50px_rgba(0,0,0,0.6)]"
         style={{ 
           width: WHEEL_SIZE, 
           height: WHEEL_SIZE,
           transform: `rotate(${rotation}deg)`,
-          // Mantemos a transição sempre ativa para evitar o "pulo" ao mudar o estado isSpinning.
-          // Usamos uma curva que começa rápido e termina muito devagar (Ease Out acentuado).
           transition: `transform ${SPIN_DURATION}ms cubic-bezier(0.1, 0, 0, 1)`,
           willChange: 'transform'
         }}
@@ -64,12 +133,9 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
           viewBox={`0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}`}
           className="block overflow-visible"
         >
-          {/* Desenho das Fatias */}
           {segments.map((seg) => (
             <g key={seg.id}>
               <path d={seg.pathData} fill={seg.color} stroke="#ffffff11" strokeWidth="0.5" />
-              
-              {/* Texto Radial */}
               <g transform={`rotate(${seg.midAngle}, ${radius}, ${radius})`}>
                 <text
                   x={radius}
@@ -88,7 +154,6 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
             </g>
           ))}
           
-          {/* Aro de Borda Amarela */}
           <circle 
             cx={radius} 
             cy={radius} 
@@ -96,28 +161,16 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
             fill="none" 
             stroke="#ca8a04" 
             strokeWidth="8" 
-            className="drop-shadow-sm"
           />
           
-          <circle 
-            cx={radius} 
-            cy={radius} 
-            r={sliceRadius + 2} 
-            fill="none" 
-            stroke="#fde047" 
-            strokeWidth="1" 
-            opacity="0.3"
-          />
-
-          {/* Centro Decorativo */}
           <circle cx={radius} cy={radius} r={radius * 0.18} fill="#ca8a04" />
           <circle cx={radius} cy={radius} r={radius * 0.14} fill="#854d0e" />
         </svg>
       </div>
 
-      {/* Center Button (Giro da Sorte) */}
+      {/* Center Button */}
       <button
-        onClick={onSpinClick}
+        onClick={handleButtonClick}
         disabled={isSpinning}
         className={`absolute z-40 w-24 h-24 rounded-full flex flex-col items-center justify-center text-center font-black transition-all transform active:scale-95 shadow-[0_0_30px_rgba(0,0,0,0.4)] border-4 border-yellow-400
           ${isSpinning 
@@ -127,10 +180,6 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
       >
         <span className="text-[10px] uppercase tracking-widest leading-none opacity-90">Giro da</span>
         <span className="text-lg uppercase tracking-tighter">Sorte</span>
-        
-        {!isSpinning && (
-          <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white/30 to-transparent pointer-events-none" />
-        )}
       </button>
     </div>
   );
