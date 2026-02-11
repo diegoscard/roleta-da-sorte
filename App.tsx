@@ -15,22 +15,83 @@ const App: React.FC = () => {
   const [winProbability, setWinProbability] = useState(5); 
   const [targetPrizeId, setTargetPrizeId] = useState<number>(0);
 
-  // Áudios com URLs mais estáveis e de carregamento rápido
-  const winAudio = useRef<HTMLAudioElement | null>(null);
-  const loseAudio = useRef<HTMLAudioElement | null>(null);
+  const audioCtx = useRef<AudioContext | null>(null);
 
-  useEffect(() => {
-    winAudio.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2018/success-fanfare-trumpets-618.wav');
-    loseAudio.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2017/fail-buzzer-01-655.wav');
-    
-    // Configurações de volume
-    if (winAudio.current) winAudio.current.volume = 0.5;
-    if (loseAudio.current) loseAudio.current.volume = 0.3;
+  // Inicializa o AudioContext no primeiro clique
+  const initAudio = () => {
+    if (!audioCtx.current) {
+      audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioCtx.current.state === 'suspended') {
+      audioCtx.current.resume();
+    }
+  };
 
-    // Pré-carregamento
-    winAudio.current?.load();
-    loseAudio.current?.load();
-  }, []);
+  // Som sintético de Vitória (Fanfara e Aplausos Simulados)
+  const playWinSound = () => {
+    if (!audioCtx.current) return;
+    const ctx = audioCtx.current;
+    const now = ctx.currentTime;
+
+    // Fanfarra (Notas subindo)
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.1);
+      g.gain.setValueAtTime(0, now + i * 0.1);
+      g.gain.linearRampToValueAtTime(0.2, now + i * 0.1 + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.5);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(now + i * 0.1);
+      osc.stop(now + i * 0.1 + 0.6);
+    });
+
+    // Simulação de Aplausos (Ruído Branco filtrado)
+    for (let i = 0; i < 3; i++) {
+      const bufferSize = ctx.sampleRate * 2;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let j = 0; j < bufferSize; j++) {
+        data[j] = Math.random() * 2 - 1;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1000 + (i * 500);
+      filter.Q.value = 1;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.05, now + 0.2);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 2);
+      noise.connect(filter);
+      filter.connect(g);
+      g.connect(ctx.destination);
+      noise.start(now);
+    }
+  };
+
+  // Som sintético de Derrota (Buzzer descendente)
+  const playLoseSound = () => {
+    if (!audioCtx.current) return;
+    const ctx = audioCtx.current;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(70, now + 0.5);
+    g.gain.setValueAtTime(0.1, now);
+    g.gain.linearRampToValueAtTime(0, now + 0.5);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.5);
+  };
 
   const toggleAdmin = () => setShowAdmin(!showAdmin);
 
@@ -39,21 +100,7 @@ const App: React.FC = () => {
 
   const handleSpin = useCallback(() => {
     if (appState === AppState.SPINNING) return;
-
-    // DESBLOQUEIO DE ÁUDIO PARA MOBILE
-    // Tocamos e pausamos imediatamente para ganhar permissão do navegador
-    if (winAudio.current) {
-      winAudio.current.play().then(() => {
-        winAudio.current?.pause();
-        winAudio.current!.currentTime = 0;
-      }).catch(() => {});
-    }
-    if (loseAudio.current) {
-      loseAudio.current.play().then(() => {
-        loseAudio.current?.pause();
-        loseAudio.current!.currentTime = 0;
-      }).catch(() => {});
-    }
+    initAudio();
 
     setAppState(AppState.SPINNING);
     setResult(null);
@@ -76,7 +123,7 @@ const App: React.FC = () => {
     const angleStep = 360 / PRIZES.length;
     const prizeIndex = PRIZES.findIndex(p => p.id === selectedPrize.id);
     
-    const extraSpins = (10 + Math.floor(Math.random() * 5)) * 360; // Mais voltas para drama
+    const extraSpins = (10 + Math.floor(Math.random() * 5)) * 360; 
     const sliceStartAngle = prizeIndex * angleStep;
     const randomOffsetInSlice = (0.2 + Math.random() * 0.6) * angleStep;
     const targetRotationWithinCircle = 360 - (sliceStartAngle + randomOffsetInSlice);
@@ -91,9 +138,9 @@ const App: React.FC = () => {
       setResult(selectedPrize);
       
       if (selectedPrize.isWin) {
-        winAudio.current?.play().catch(e => console.error("Win audio blocked", e));
+        playWinSound();
       } else {
-        loseAudio.current?.play().catch(e => console.error("Lose audio blocked", e));
+        playLoseSound();
       }
     }, SPIN_DURATION + 100);
   }, [appState, rotation, rigMode, winProbability, targetPrizeId, winPrizes, losePrizes]);
@@ -101,8 +148,6 @@ const App: React.FC = () => {
   const reset = () => {
     setAppState(AppState.IDLE);
     setResult(null);
-    if (winAudio.current) { winAudio.current.pause(); winAudio.current.currentTime = 0; }
-    if (loseAudio.current) { loseAudio.current.pause(); loseAudio.current.currentTime = 0; }
   };
 
   return (
@@ -164,10 +209,8 @@ const App: React.FC = () => {
           </p>
         </div>
 
-        {/* Secret Admin Button */}
         <div className="absolute bottom-6 right-6 w-20 h-20 z-[70]" onDoubleClick={toggleAdmin} />
 
-        {/* Admin Panel */}
         {showAdmin && (
           <div className="absolute inset-0 z-[100] bg-slate-950 p-6 flex flex-col animate-in fade-in duration-300">
             <div className="flex justify-between items-center mb-8">

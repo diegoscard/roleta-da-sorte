@@ -32,6 +32,9 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
     if (!audioCtx.current) return;
     const ctx = audioCtx.current;
     
+    // Pequeno buffer para garantir que o contexto está ativo
+    if (ctx.state === 'suspended') ctx.resume();
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
@@ -39,7 +42,7 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
     osc.frequency.setValueAtTime(220, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.04);
 
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
 
     osc.connect(gain);
@@ -65,7 +68,6 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
       const angle = Math.atan2(matrix.b, matrix.a) * (180 / Math.PI);
       const normalizedAngle = (360 - (angle < 0 ? angle + 360 : angle)) % 360;
       
-      // O tick deve acontecer quando a seta cruza o pino (borda da fatia)
       const currentSegmentIndex = Math.floor(normalizedAngle / angleStep);
       
       if (currentSegmentIndex !== lastSegment.current) {
@@ -117,7 +119,6 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
         </svg>
       </div>
 
-      {/* Main Wheel Container */}
       <div 
         ref={wheelRef}
         className="relative flex-shrink-0 flex items-center justify-center rounded-full bg-slate-900 shadow-[0_0_60px_rgba(0,0,0,0.8)]"
@@ -156,14 +157,12 @@ const RouletteWheel: React.FC<RouletteWheelProps> = ({ rotation, onSpinClick, is
             </g>
           ))}
           
-          {/* Border Glow */}
           <circle cx={radius} cy={radius} r={sliceRadius} fill="none" stroke="#ca8a04" strokeWidth="8" />
           <circle cx={radius} cy={radius} r={radius * 0.22} fill="#ca8a04" />
           <circle cx={radius} cy={radius} r={radius * 0.16} fill="#854d0e" />
         </svg>
       </div>
 
-      {/* Center Button */}
       <button
         onClick={handleButtonClick}
         disabled={isSpinning}
