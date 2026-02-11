@@ -1,0 +1,5 @@
+{
+  "name": "Roleta da Sorte",
+  "description": "Um aplicativo de roleta interativo com prêmios em dinheiro e controle administrativo de resultados.",
+  "requestFramePermissions": []
+}
