@@ -1,9 +1,9 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
-import RouletteWheel from './components/RouletteWheel';
-import Confetti from './components/Confetti';
-import { AppState, Prize, RigMode } from './types';
-import { PRIZES, SPIN_DURATION } from './constants';
+import RouletteWheel from './components/RouletteWheel.tsx';
+import Confetti from './components/Confetti.tsx';
+import { AppState, Prize, RigMode } from './types.ts';
+import { PRIZES, SPIN_DURATION } from './constants.ts';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -11,7 +11,6 @@ const App: React.FC = () => {
   const [result, setResult] = useState<Prize | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
 
-  // Configurações de Administração
   const [rigMode, setRigMode] = useState<RigMode>('ALWAYS_LOSE');
   const [winProbability, setWinProbability] = useState(5); 
   const [targetPrizeId, setTargetPrizeId] = useState<number>(0);
@@ -67,20 +66,11 @@ const App: React.FC = () => {
   };
 
   return (
-    /* Container principal que ocupa toda a janela do navegador */
     <div className="flex flex-col items-center justify-center h-screen w-screen bg-slate-950 text-white overflow-hidden">
-      
-      {/* 
-        Ajuste do Frame: 
-        - Em telas pequenas (mobile), ele ocupa 100% da largura e altura (w-full h-full).
-        - Em telas maiores (desktop), ele mantém o formato de celular para preview.
-      */}
-      <div className="relative w-full h-full sm:max-w-[380px] sm:h-[85vh] sm:rounded-[3rem] sm:border-[10px] border-slate-800 bg-gradient-to-b from-slate-900 to-black shadow-2xl overflow-hidden flex flex-col transition-all duration-500">
+      <div className="relative w-full h-full sm:max-w-[400px] sm:h-[90vh] sm:rounded-[3rem] sm:border-[10px] border-slate-800 bg-gradient-to-b from-slate-900 to-black shadow-2xl overflow-hidden flex flex-col transition-all duration-500">
         
-        {/* Confetes - agora fluirão naturalmente no container */}
         {appState === AppState.RESULT && result?.isWin && <Confetti />}
 
-        {/* Top Header */}
         <div className="pt-12 pb-6 px-6 text-center shrink-0 z-10">
           <h1 className="text-4xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-500 to-yellow-200 drop-shadow-md tracking-tighter uppercase italic text-nowrap">
             Giro da Sorte
@@ -88,9 +78,8 @@ const App: React.FC = () => {
           <p className="text-slate-500 text-[10px] mt-2 font-bold uppercase tracking-widest">Sua chance é agora!</p>
         </div>
 
-        {/* Wheel Section - Ocupa o espaço central de forma flexível */}
         <div className="flex-1 flex flex-col items-center justify-center px-4 overflow-hidden z-10">
-          <div className="scale-90 sm:scale-100 transition-transform">
+          <div className="scale-[0.85] sm:scale-100 transition-transform">
             <RouletteWheel 
               rotation={rotation} 
               onSpinClick={handleSpin} 
@@ -125,15 +114,12 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="pb-10 pt-4 text-center text-[9px] text-slate-600 uppercase font-bold tracking-widest shrink-0 z-10">
           Certificado de Segurança Gold
         </div>
 
-        {/* Secret Admin Button */}
         <div className="absolute bottom-6 right-6 w-16 h-16 z-[70] cursor-default" onDoubleClick={toggleAdmin} />
 
-        {/* Admin Panel Overlay */}
         {showAdmin && (
           <div className="absolute inset-0 z-[100] bg-slate-950 p-6 flex flex-col overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
