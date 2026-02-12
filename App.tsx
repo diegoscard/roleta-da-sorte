@@ -13,7 +13,8 @@ const App: React.FC = () => {
 
   const [rigMode, setRigMode] = useState<RigMode>('ALWAYS_LOSE');
   const [winProbability, setWinProbability] = useState(5); 
-  const [targetPrizeId, setTargetPrizeId] = useState<number>(0);
+  // Agora permite múltiplos IDs de prêmios alvo
+  const [targetPrizeIds, setTargetPrizeIds] = useState<number[]>([0]);
 
   const audioCtx = useRef<AudioContext | null>(null);
 
@@ -33,8 +34,7 @@ const App: React.FC = () => {
     const ctx = audioCtx.current;
     const now = ctx.currentTime;
 
-    // Fanfarra (Notas subindo)
-    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    const notes = [523.25, 659.25, 783.99, 1046.50]; 
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
@@ -49,7 +49,6 @@ const App: React.FC = () => {
       osc.stop(now + i * 0.1 + 0.6);
     });
 
-    // Simulação de Aplausos (Ruído Branco filtrado)
     for (let i = 0; i < 3; i++) {
       const bufferSize = ctx.sampleRate * 2;
       const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
@@ -74,7 +73,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Som sintético de Derrota (Buzzer descendente)
   const playLoseSound = () => {
     if (!audioCtx.current) return;
     const ctx = audioCtx.current;
@@ -98,6 +96,17 @@ const App: React.FC = () => {
   const winPrizes = useMemo(() => PRIZES.filter(p => p.isWin), []);
   const losePrizes = useMemo(() => PRIZES.filter(p => !p.isWin), []);
 
+  const toggleTargetPrize = (id: number) => {
+    setTargetPrizeIds(prev => {
+      if (prev.includes(id)) {
+        // Não permite desselecionar tudo se for o único
+        if (prev.length === 1) return prev;
+        return prev.filter(item => item !== id);
+      }
+      return [...prev, id];
+    });
+  };
+
   const handleSpin = useCallback(() => {
     if (appState === AppState.SPINNING) return;
     initAudio();
@@ -107,14 +116,20 @@ const App: React.FC = () => {
 
     let selectedPrize: Prize;
 
+    const getRandomTargetPrize = () => {
+      const validTargetIds = targetPrizeIds.length > 0 ? targetPrizeIds : [0];
+      const randomId = validTargetIds[Math.floor(Math.random() * validTargetIds.length)];
+      return PRIZES.find(p => p.id === randomId) || winPrizes[0];
+    };
+
     if (rigMode === 'ALWAYS_LOSE') {
       selectedPrize = losePrizes[Math.floor(Math.random() * losePrizes.length)];
     } else if (rigMode === 'FORCE_SPECIFIC') {
-      selectedPrize = PRIZES.find(p => p.id === targetPrizeId) || losePrizes[0];
+      selectedPrize = getRandomTargetPrize();
     } else {
       const roll = Math.random() * 100;
       if (roll <= winProbability) {
-        selectedPrize = PRIZES.find(p => p.id === targetPrizeId) || winPrizes[0];
+        selectedPrize = getRandomTargetPrize();
       } else {
         selectedPrize = losePrizes[Math.floor(Math.random() * losePrizes.length)];
       }
@@ -143,7 +158,7 @@ const App: React.FC = () => {
         playLoseSound();
       }
     }, SPIN_DURATION + 100);
-  }, [appState, rotation, rigMode, winProbability, targetPrizeId, winPrizes, losePrizes]);
+  }, [appState, rotation, rigMode, winProbability, targetPrizeIds, winPrizes, losePrizes]);
 
   const reset = () => {
     setAppState(AppState.IDLE);
@@ -240,14 +255,20 @@ const App: React.FC = () => {
 
               {(rigMode === 'PROBABILITY' || rigMode === 'FORCE_SPECIFIC') && (
                 <div className="bg-slate-900/50 p-5 rounded-3xl border border-white/5 animate-in slide-in-from-top-2">
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Selecionar Prêmio Alvo</label>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Selecionar Prêmios Alvo (Múltiplo)</label>
                   <div className="grid grid-cols-2 gap-2">
                     {winPrizes.map(p => (
-                      <button key={p.id} onClick={() => setTargetPrizeId(p.id)} className={`p-3 rounded-xl text-[10px] font-black uppercase transition-all border ${targetPrizeId === p.id ? 'bg-white text-slate-950 border-white' : 'bg-slate-800 border-white/5 text-slate-500'}`}>
+                      <button 
+                        key={p.id} 
+                        onClick={() => toggleTargetPrize(p.id)} 
+                        className={`p-3 rounded-xl text-[10px] font-black uppercase transition-all border flex items-center justify-center gap-2 ${targetPrizeIds.includes(p.id) ? 'bg-white text-slate-950 border-white shadow-[0_0_10px_rgba(255,255,255,0.3)]' : 'bg-slate-800 border-white/5 text-slate-500'}`}
+                      >
                         {p.label}
+                        {targetPrizeIds.includes(p.id) && <span className="text-[8px]">●</span>}
                       </button>
                     ))}
                   </div>
+                  <p className="mt-3 text-[8px] text-slate-600 uppercase font-bold tracking-widest text-center">Toque para selecionar um ou mais prêmios</p>
                 </div>
               )}
 
